@@ -25,7 +25,7 @@ def handle_all_messages(message):
     bot.reply_to(message, f"⏳ جاري التحليل حول: {user_topic}\nانتظر لحظة...")
     try:
         response = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": "أنت مساعد ذكي متخصص في تقديم تقارير شاملة باللغة العربية."},
                 {"role": "user", "content": f"اكتب تقريراً شاملاً ومفصلاً باللغة العربية حول: {user_topic}"}
