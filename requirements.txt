@@ -1,5 +1,3 @@
-
-
 pyTelegramBotAPI
-crewai
+crewai==0.28.0
 litellm
