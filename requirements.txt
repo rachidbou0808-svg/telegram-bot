@@ -1,3 +1,2 @@
 pyTelegramBotAPI
-crewai==0.28.0
-litellm
+groq
