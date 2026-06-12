@@ -21,8 +21,7 @@ researcher_agent = Agent(
     ),
     allow_delegation=False,
     verbose=True,
-    llm="groq/llama3-70b-8192",
-
+llm="groq/mixtral-8x7b-32768",
 # ─── تقسيم الرسائل الطويلة ───────────────
 def send_long_message(chat_id, text, max_length=4000):
     for i in range(0, len(text), max_length):
