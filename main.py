@@ -1,12 +1,12 @@
 import os
 import telebot
-from groq import Groq
+import anthropic
 
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = Groq(api_key=GROQ_API_KEY)
+client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 def send_long_message(chat_id, text, max_length=4000):
     for i in range(0, len(text), max_length):
@@ -16,26 +16,33 @@ def send_long_message(chat_id, text, max_length=4000):
 def send_welcome(message):
     bot.reply_to(message,
         "👋 مرحباً! أنا مساعدك الذكي.\n"
-        "أرسل لي أي موضوع وسأقدم لك تقريراً شاملاً. 📊"
+        "📌 أرسل لي أي موضوع وسأقدم لك تقريراً شاملاً عنه."
     )
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     user_topic = message.text.strip()
     bot.reply_to(message, f"⏳ جاري التحليل حول: {user_topic}\nانتظر لحظة...")
+
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
             messages=[
-                {"role": "system", "content": "أنت مساعد ذكي متخصص في تقديم تقارير شاملة باللغة العربية."},
-                {"role": "user", "content": f"اكتب تقريراً شاملاً ومفصلاً باللغة العربية حول: {user_topic}"}
+                {
+                    "role": "user",
+                    "content": f"أنت مساعد ذكي متخصص في تقديم تقارير شاملة باللغة العربية. اكتب تقريراً شاملاً ومفصلاً باللغة العربية حول: {user_topic}"
+                }
             ]
         )
-        result = response.choices[0].message.content
-        bot.send_message(message.chat.id, "✅ اكتمل التقرير:")
+
+        result = response.content[0].text
+        bot.send_message(message.chat_id, "✅ اكتمل التقرير:")
         send_long_message(message.chat.id, result)
+
     except Exception as e:
         bot.send_message(message.chat.id, f"❌ حدث خطأ:\n{str(e)}")
 
 print("✅ البوت يعمل...")
 bot.infinity_polling(timeout=30, long_polling_timeout=10)
+
