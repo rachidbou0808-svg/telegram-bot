@@ -37,7 +37,7 @@ def handle_all_messages(message):
         )
 
         result = response.content[0].text
-        bot.send_message(message.chat_id, "✅ اكتمل التقرير:")
+    bot.send_message(message.chat.id, "✅ اكتمل التقرير:")
         send_long_message(message.chat.id, result)
 
     except Exception as e:
