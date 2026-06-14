@@ -37,7 +37,7 @@ def handle_all_messages(message):
         )
 
         result = response.content[0].text
-    bot.send_message(message.chat.id, "✅ اكتمل التقرير:")
+        bot.send_message(message.chat.id, "✅ اكتمل التقرير:")
         send_long_message(message.chat.id, result)
 
     except Exception as e:
@@ -45,4 +45,3 @@ def handle_all_messages(message):
 
 print("✅ البوت يعمل...")
 bot.infinity_polling(timeout=30, long_polling_timeout=10)
-
