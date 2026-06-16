@@ -103,7 +103,31 @@ def handle_photo(message):
     bot.reply_to(message, "🖼️ جاري تحليل الصورة...")
     try:
         caption = message.caption or "صف هذه الصورة بالتفصيل باللغة العربية"
-        result = ask_groq(f"المستخدم أرسل صورة وكتب: {caption}. أجب بشكل مفيد.")
+        file_id = message.photo[-1].file_id
+        image_data = download_file(file_id)
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": caption
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1024
+        )
+        result = response.choices[0].message.content
         send_long_message(message.chat.id, result)
     except Exception as e:
         bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
