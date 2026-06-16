@@ -2,11 +2,13 @@ import os
 import telebot
 import base64
 import requests
+import tempfile
 from groq import Groq
 from telebot import types
 
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY')
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
@@ -39,6 +41,7 @@ def main_menu():
         types.KeyboardButton("📰 آخر الأخبار"),
         types.KeyboardButton("💰 أسعار العملات"),
         types.KeyboardButton("🤖 اسأل الذكاء الاصطناعي"),
+        types.KeyboardButton("🌤️ الطقس"),
         types.KeyboardButton("ℹ️ مساعدة")
     )
     return markup
@@ -55,6 +58,8 @@ def send_welcome(message):
         "🖼️ الصور\n"
         "📄 ملفات PDF\n"
         "🔗 الروابط\n"
+        "🎤 الرسائل الصوتية\n"
+        "🌤️ الطقس\n"
         "😄 الستيكرات\n\n"
         "اختر من القائمة أو أرسل أي شيء!",
         reply_markup=main_menu()
@@ -67,11 +72,14 @@ def send_help(message):
         "/start - بدء البوت\n"
         "/help - المساعدة\n"
         "/news - آخر الأخبار\n"
-        "/price - أسعار العملات\n\n"
+        "/price - أسعار العملات\n"
+        "/weather [مدينة] - الطقس\n\n"
         "*ما يمكنني فعله:*\n"
         "🖼️ أصف وأحلل الصور\n"
         "📄 ألخص ملفات PDF\n"
         "🔗 ألخص محتوى الروابط\n"
+        "🎤 أحول الصوت إلى نص\n"
+        "🌤️ أعطيك الطقس\n"
         "📝 أجيب على أي سؤال\n"
         "😄 أرد على الستيكرات"
     )
@@ -97,90 +105,43 @@ def price_command(message):
     except Exception as e:
         bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
 
-@bot.message_handler(content_types=["photo"])
-def handle_photo(message):
-    bot.send_chat_action(message.chat.id, 'typing')
-    bot.reply_to(message, "🖼️ جاري تحليل الصورة...")
+@bot.message_handler(commands=["weather"])
+def weather_command(message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        bot.send_message(message.chat.id, "🌤️ اكتب اسم المدينة:\nمثال: /weather الجزائر")
+        return
+    city = parts[1]
+    get_weather(message.chat.id, city)
+
+def get_weather(chat_id, city):
+    bot.send_message(chat_id, f"⏳ جاري جلب طقس {city}...")
     try:
-        caption = message.caption or "صف هذه الصورة بالتفصيل باللغة العربية"
-        file_id = message.photo[-1].file_id
-        image_data = download_file(file_id)
-        image_base64 = base64.b64encode(image_data).decode('utf-8')
-        response = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": caption
-                        }
-                    ]
-                }
-            ],
-            max_tokens=1024
-        )
-        result = response.choices[0].message.content
-        send_long_message(message.chat.id, result)
+        if WEATHER_API_KEY:
+            url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric&lang=ar"
+            response = requests.get(url)
+            data = response.json()
+            if data.get("cod") == 200:
+                temp = data["main"]["temp"]
+                feels = data["main"]["feels_like"]
+                humidity = data["main"]["humidity"]
+                desc = data["weather"][0]["description"]
+                wind = data["wind"]["speed"]
+                result = (
+                    f"🌤️ *طقس {city}*\n\n"
+                    f"🌡️ الحرارة: {temp}°C\n"
+                    f"🤔 تبدو كأنها: {feels}°C\n"
+                    f"💧 الرطوبة: {humidity}%\n"
+                    f"💨 الرياح: {wind} م/ث\n"
+                    f"📋 الحالة: {desc}"
+                )
+                bot.send_message(chat_id, result, parse_mode="Markdown")
+            else:
+                bot.send_message(chat_id, f"❌ لم أجد مدينة بهذا الاسم: {city}")
+        else:
+            result = ask_groq(f"أعطني معلومات عن الطقس المعتاد في مدينة {city} في هذا الوقت من السنة.")
+            bot.send_message(chat_id, f"🌤️ *معلومات عن طقس {city}:*\n\n{result}", parse_mode="Markdown")
     except Exception as e:
-        bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
+        bot.send_message(chat_id, f"❌ خطأ: {str(e)}")
 
-@bot.message_handler(content_types=["document"])
-def handle_document(message):
-    bot.reply_to(message, "📄 استلمت ملفك! للأسف Groq لا يدعم قراءة PDF مباشرة. جرب أن تنسخ النص وأرسله لي.")
-
-@bot.message_handler(content_types=["sticker"])
-def handle_sticker(message):
-    emoji = message.sticker.emoji or "😊"
-    try:
-        result = ask_groq(f"أرسل لي شخص ستيكر يعبر عن {emoji}. اكتب رداً مناسباً وطريفاً باللغة العربية.")
-        bot.reply_to(message, result)
-    except Exception as e:
-        bot.reply_to(message, "😄 ستيكر جميل!")
-
-@bot.message_handler(func=lambda message: True)
-def handle_text(message):
-    text = message.text.strip()
-
-    if text == "📊 تقرير شامل":
-        bot.send_message(message.chat.id, "📊 أرسل لي الموضوع:")
-        return
-    if text == "📰 آخر الأخبار":
-        news_command(message)
-        return
-    if text == "💰 أسعار العملات":
-        price_command(message)
-        return
-    if text == "🤖 اسأل الذكاء الاصطناعي":
-        bot.send_message(message.chat.id, "🤖 اكتب سؤالك:")
-        return
-    if text == "ℹ️ مساعدة":
-        send_help(message)
-        return
-
-    if text.startswith("http://") or text.startswith("https://"):
-        bot.send_chat_action(message.chat.id, 'typing')
-        bot.reply_to(message, "🔗 جاري تحليل الرابط...")
-        try:
-            result = ask_groq(f"لخص محتوى هذا الرابط باللغة العربية: {text}")
-            send_long_message(message.chat.id, result)
-        except Exception as e:
-            bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
-        return
-
-    bot.send_chat_action(message.chat.id, 'typing')
-    try:
-        result = ask_groq(f"أجب على هذا باللغة العربية بشكل مفيد وشامل: {text}")
-        send_long_message(message.chat.id, result)
-    except Exception as e:
-        bot.send_message(message.chat.id, f"❌ خطأ: {str(e)}")
-
-print("✅ البوت يعمل...")
-bot.infinity_polling(timeout=30, long_polling_timeout=10)
+@bot.message_handler(conte
